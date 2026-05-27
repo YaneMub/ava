@@ -1,7 +1,10 @@
+import {saludos} from './data/saludos.js'
+import WordCard from './components/WordCard.jsx'
+
 function App() {
   return (
     <div className="flex items-center justify-center h-screen bg-blue-50">
-      <h1 className="text-4xl font-bold text-blue-700">AVA funciona 🎉</h1>
+      <WordCard palabra= {saludos[0].palabra} video= {saludos[0].video}/>
     </div>
   )
 }
