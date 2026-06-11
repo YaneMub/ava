@@ -1,13 +1,10 @@
 import { useState } from 'react'
 
-function PracticeInput({ palabraCorrecta }) {
+function PracticeInput({ palabraCorrecta, onVerificar }) {
     const [valor, setValor] = useState('')
     const verificar = () => {
-        if (valor === palabraCorrecta) {
-            alert('correcto')
-        } else {
-            alert('incorrecto')
-        }
+        const resultado = valor === palabraCorrecta
+        onVerificar(resultado)
     }
 
     return (
