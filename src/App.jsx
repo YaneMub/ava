@@ -16,12 +16,14 @@ function App() {
   }
   return (
     <div className="flex items-center justify-center h-screen bg-blue-50">
-      <WordCard palabra= {saludos[indice].palabra} video= {saludos[indice].video}/>
-      <FeedbackMessage esCorrecto = {esCorrecto} />
-      <PracticeInput
-      palabraCorrecta={saludos[indice].palabra}
-      onVerificar={manejarVerificacion} 
-      />
+      <div className="flex flex-col items-center gap-4 w-full max-w-md">
+        <WordCard palabra= {saludos[indice].palabra} video= {saludos[indice].video}/>
+        <FeedbackMessage esCorrecto = {esCorrecto} />
+        <PracticeInput
+        palabraCorrecta={saludos[indice].palabra}
+        onVerificar={manejarVerificacion} 
+        />
+      </div>
     </div>
   )
 }
