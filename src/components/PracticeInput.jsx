@@ -1,9 +1,9 @@
 import { useState } from 'react'
 
-function PracticeInput({ palabraCorrecta, onVerificar }) {
+function PracticeInput({ palabraCorrecta, onVerificar, deshabilitado }) {
     const [valor, setValor] = useState('')
     const verificar = () => {
-        const resultado = valor === palabraCorrecta
+        const resultado = valor.trim().toLowerCase() === palabraCorrecta.trim().toLowerCase()
         onVerificar(resultado)
     }
 
@@ -12,8 +12,9 @@ function PracticeInput({ palabraCorrecta, onVerificar }) {
             <input className="border-2 border-blue-300 rounded-lg p-3 text-xl text-center focus:outline-none focus:border-blue-500"
             type="text"
             value={valor}
+            disabled={deshabilitado}
             onChange={(e) => setValor(e.target.value)} />
-            <button onClick={verificar} className="bg-blue-600 text-white font-bold py-3 rounded-lg text-xl hover:bg-blue-700">Verificar</button>
+            <button onClick={verificar} disabled={deshabilitado} className="bg-blue-600 text-white font-bold py-3 rounded-lg text-xl hover:bg-blue-700">Verificar</button>
 
         </div>
     )
