@@ -1,4 +1,3 @@
-import {saludos} from './data/saludos.js'
 import {useState, useEffect} from 'react'
 import WordCard from './components/WordCard.jsx'
 import PracticeInput from './components/PracticeInput.jsx'
@@ -7,11 +6,30 @@ import FeedbackMessage from './components/FeedbackMessage.jsx'
 
 function App() {
   const [pantalla, setPantalla] = useState('practica') // 'practica' | 'transición' | 'finalizado'
-  const [cola, setCola] = useState(saludos)
+  const [todasLasPalabras, setTodasLasPalabras] = useState([])
+  const [cola, setCola] = useState([])
+  const [cargando, setCargando] = useState(true)
   const [indice, setIndice] = useState(0)
   const [erroresRonda, setErroresRonda] = useState([])
   const [esCorrecto, setEsCorrecto] = useState(null)
-  
+
+  useEffect(() => {
+    const obtenerPalabras = async () => {
+      try {
+        const respuesta = await fetch(`${import.meta.env.VITE_API_URL}/api/words`)
+        const datos = await respuesta.json()
+        setTodasLasPalabras(datos)
+        setCola(datos)
+      } catch (error) {
+        console.error('Error al conectar con el backend:', error)
+      } finally {
+        setCargando(false)
+      }
+    }
+
+    obtenerPalabras()
+  }, [])
+
   const palabraActual = cola[indice]
 
   const manejarVerificacion = (resultado) => {
@@ -41,11 +59,19 @@ function App() {
   }
 
   const manejarReiniciar =() => {
-    setCola(saludos)
+    setCola(todasLasPalabras)
     setIndice(0)
     setErroresRonda([])
     setEsCorrecto(null)
     setPantalla('practica')
+  }
+
+  if (cargando) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-blue-50">
+        <p className="text-xl font-bold animate-pulse">Cargando palabras...</p>
+      </div>
+    )
   }
 
   if (pantalla === 'transicion') {
@@ -73,11 +99,11 @@ function App() {
   return (
     <div className="flex items-center justify-center h-screen bg-blue-50">
       <div className="flex flex-col items-center gap-4 w-full max-w-md">
-        <WordCard palabra={palabraActual.palabra} video={palabraActual.video} />
+        <WordCard palabra={palabraActual.word} video={palabraActual.video} />
         <FeedbackMessage esCorrecto={esCorrecto} />
         <PracticeInput
           key={palabraActual.id}
-          palabraCorrecta={palabraActual.palabra}
+          palabraCorrecta={palabraActual.word}
           onVerificar={manejarVerificacion}
           deshabilitado={esCorrecto !== null}
         />

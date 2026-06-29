@@ -23,10 +23,6 @@ app.get('/api/health', (req, res) => {
 
 const PORT = process.env.PORT || 3001;
 
-app.listen(PORT, () => {
-    console.log(`Servidor corriendo en el puerto ${PORT}`);
-});
-
 app.get('/api/words', async (req, res) => {
   try {
     // Le pedimos al pool que ejecute una consulta SQL clásica
@@ -39,3 +35,8 @@ app.get('/api/words', async (req, res) => {
     res.status(500).json({ error: 'Error al obtener los datos' });
   }
 });
+
+app.listen(PORT, () => {
+    console.log(`Servidor corriendo en el puerto ${PORT}`);
+});
+
