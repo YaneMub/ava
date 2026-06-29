@@ -1,5 +1,5 @@
 import {saludos} from './data/saludos.js'
-import {useState} from 'react'
+import {useState, useEffect} from 'react'
 import WordCard from './components/WordCard.jsx'
 import PracticeInput from './components/PracticeInput.jsx'
 import FeedbackMessage from './components/FeedbackMessage.jsx'
