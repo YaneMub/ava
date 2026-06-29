@@ -1,6 +1,9 @@
 import express from 'express'
 import cors from 'cors'
-import 'dotenv/config'; // Esto lee el archivo .env al toque
+// Si no estamos en producción, leemos el archivo .env local
+if (process.env.NODE_ENV !== 'production') {
+  await import('dotenv/config');
+} // Esto lee el archivo .env al toque
 import pg from 'pg';
 
 
