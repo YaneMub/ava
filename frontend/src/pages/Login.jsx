@@ -43,7 +43,7 @@ function Login() {
             localStorage.setItem('token', datos.token);
             localStorage.setItem('usuario', JSON.stringify(datos.usuario));
             setError('');
-            navigate('/');
+            navigate('/dashboard');
         } catch (error) {
             console.error('Error al conectar con el backend:', error);
             setError('No se pudo conectar con el servidor');
