@@ -1,16 +1,55 @@
-import { Link } from 'react-router-dom'
+import { useState, useEffect } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 
-const lecciones = [
-  { titulo: 'Presentación', subtitulo: 'Aprendé la seña', icono: '▶️', estado: 'hecho' },
-  { titulo: 'Reconocimiento', subtitulo: 'Elegí la palabra correcta', icono: '👁️', estado: 'hecho' },
-  { titulo: 'Producción', subtitulo: 'Escribí la palabra', icono: '✏️', estado: 'hecho' },
-  { titulo: 'Repaso general', subtitulo: '3 palabras · todas correctas', icono: '🔄', estado: 'hecho' },
-  { titulo: 'Presentación 2', subtitulo: 'hola · chau · gracias', icono: '▶️', estado: 'activo', progreso: 40 },
-  { titulo: 'Lección bloqueada', subtitulo: 'Completá la anterior para desbloquear', icono: '🔒', estado: 'bloqueado' },
-  { titulo: 'Lección bloqueada', subtitulo: 'Completá la anterior para desbloquear', icono: '🔒', estado: 'bloqueado' },
-]
+const iconosPorTipo = {
+  presentacion: '▶️',
+  reconocimiento: '👁️',
+  produccion: '✏️',
+  repaso: '🔄',
+}
 
 function MapaCurso() {
+  const [unidad, setUnidad] = useState(null)
+  const [actividades, setActividades] = useState([])
+  const [cargando, setCargando] = useState(true)
+  const navigate = useNavigate()
+
+  useEffect(() => {
+    const obtenerUnidadActual = async () => {
+      try {
+        const token = localStorage.getItem('token')
+        const respuesta = await fetch(`${import.meta.env.VITE_API_URL}/api/units/actual`, {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+
+        if (!respuesta.ok) {
+          navigate('/dashboard')
+          return
+        }
+
+        const datos = await respuesta.json()
+        setUnidad(datos.unidad)
+        setActividades(datos.actividades)
+      } catch (error) {
+        console.error('Error al conectar con el backend:', error)
+      } finally {
+        setCargando(false)
+      }
+    }
+
+    obtenerUnidadActual()
+  }, [navigate])
+
+  const actividadActiva = actividades.find((a) => a.estado === 'activo')
+
+  if (cargando) {
+    return (
+      <div className="min-h-screen bg-fondo flex items-center justify-center">
+        <p className="text-textoSecundario">Cargando tu progreso...</p>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-fondo flex justify-center">
       <div className="w-full max-w-md pb-24 px-4">
@@ -37,63 +76,63 @@ function MapaCurso() {
         </div>
 
         <div className="bg-lavanda rounded-2xl p-4 mb-4">
-          <p className="text-white font-bold">Unidad 1 — Saludos</p>
-          <p className="text-white text-sm opacity-90">9 palabras · 60% completado</p>
+          <p className="text-white font-bold">{unidad?.nombre}</p>
+          <p className="text-white text-sm opacity-90">{unidad?.descripcion}</p>
         </div>
 
         <div className="flex flex-col">
-          {lecciones.map((leccion, i) => (
-            <div key={i} className="flex gap-3">
+          {actividades.map((actividad, i) => (
+            <div key={actividad.id} className="flex gap-3">
 
               {/* Nodo + línea del timeline */}
               <div className="flex flex-col items-center w-4 flex-shrink-0">
                 <span className={`w-4 h-4 rounded-full flex-shrink-0 ${
-                  leccion.estado === 'hecho' ? 'bg-exito' :
-                  leccion.estado === 'activo' ? 'bg-lavanda animate-pulse' :
+                  actividad.estado === 'hecho' ? 'bg-exito' :
+                  actividad.estado === 'activo' ? 'bg-lavanda animate-pulse' :
                   'bg-borde'
                 }`}></span>
-                {i < lecciones.length - 1 && (
-                  <div className={`w-0.5 flex-1 my-1 ${leccion.estado === 'hecho' ? 'bg-exito' : 'bg-borde'}`}></div>
+                {i < actividades.length - 1 && (
+                  <div className={`w-0.5 flex-1 my-1 ${actividad.estado === 'hecho' ? 'bg-exito' : 'bg-borde'}`}></div>
                 )}
               </div>
 
-              {/* Tarjeta de la lección */}
+              {/* Tarjeta de la actividad */}
               <div className={`flex-1 rounded-2xl p-4 mb-3 ${
-                leccion.estado === 'hecho' ? 'bg-lavanda/15 border border-lavanda/30' :
-                leccion.estado === 'activo' ? 'bg-white border-2 border-lavanda' :
+                actividad.estado === 'hecho' ? 'bg-lavanda/15 border border-lavanda/30' :
+                actividad.estado === 'activo' ? 'bg-white border-2 border-lavanda' :
                 'bg-borde/40 opacity-60'
               }`}>
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-3">
                     <span className={`rounded-full w-9 h-9 flex items-center justify-center text-lg ${
-                      leccion.estado === 'activo' ? 'bg-lavanda text-white' : 'bg-white'
-                    }`}>{leccion.icono}</span>
+                      actividad.estado === 'activo' ? 'bg-lavanda text-white' : 'bg-white'
+                    }`}>{iconosPorTipo[actividad.tipo] || '📘'}</span>
                     <div>
-                      <p className="font-bold text-textoPrincipal">{leccion.titulo}</p>
-                      <p className="text-xs text-textoSecundario">{leccion.subtitulo}</p>
+                      <p className="font-bold text-textoPrincipal">{actividad.titulo}</p>
+                      <p className="text-xs text-textoSecundario">{actividad.subtitulo}</p>
                     </div>
                   </div>
-                  {leccion.estado === 'hecho' && (
+                  {actividad.estado === 'hecho' && (
                     <span className="bg-exito text-white text-xs font-bold rounded-full px-2 py-1">✓</span>
                   )}
+                  {actividad.estado === 'bloqueado' && <span className="text-xl">🔒</span>}
                 </div>
-                {leccion.estado === 'activo' && (
-                  <div className="w-full bg-borde rounded-full h-2 mt-3">
-                    <div className="bg-lavanda h-2 rounded-full" style={{ width: `${leccion.progreso}%` }}></div>
-                  </div>
-                )}
               </div>
 
             </div>
           ))}
         </div>
 
-        <Link
-          to="/"
-          className="block text-center bg-lavanda text-white font-bold py-3 rounded-lg mt-6 hover:opacity-90"
-        >
-          Continuar lección →
-        </Link>
+        {actividadActiva ? (
+          <Link
+            to={`/?actividad=${actividadActiva.id}`}
+            className="block text-center bg-lavanda text-white font-bold py-3 rounded-lg mt-6 hover:opacity-90"
+          >
+            Continuar lección →
+          </Link>
+        ) : (
+          <p className="text-center text-textoSecundario font-bold mt-6">¡Completaste esta unidad! 🎉</p>
+        )}
 
         <nav className="fixed bottom-0 inset-x-0 bg-white border-t border-borde flex justify-center">
           <div className="w-full max-w-md flex justify-around py-3">

@@ -1,10 +1,14 @@
 import {useState, useEffect} from 'react'
+import { useSearchParams, Link } from 'react-router-dom'
 import WordCard from '../components/WordCard.jsx'
 import PracticeInput from '../components/PracticeInput.jsx'
 import FeedbackMessage from '../components/FeedbackMessage.jsx'
 
 
 function Practica() {
+  const [searchParams] = useSearchParams()
+  const actividadId = searchParams.get('actividad')
+
   const [pantalla, setPantalla] = useState('practica') // 'practica' | 'transición' | 'finalizado'
   const [todasLasPalabras, setTodasLasPalabras] = useState([])
   const [cola, setCola] = useState([])
@@ -29,6 +33,28 @@ function Practica() {
 
     obtenerPalabras()
   }, [])
+
+  useEffect(() => {
+    if (pantalla !== 'finalizado' || !actividadId) return
+
+    const marcarProgreso = async () => {
+      try {
+        const token = localStorage.getItem('token')
+        await fetch(`${import.meta.env.VITE_API_URL}/api/progress`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ activityId: Number(actividadId) }),
+        })
+      } catch (error) {
+        console.error('Error al guardar el progreso:', error)
+      }
+    }
+
+    marcarProgreso()
+  }, [pantalla, actividadId])
 
   const palabraActual = cola[indice]
 
@@ -90,7 +116,13 @@ function Practica() {
       <div className="flex items-center justify-center h-screen bg-blue-50">
         <div className="flex flex-col items-center gap-4 w-full max-w-md text-center">
           <p className="text-2xl font-bold">🎉 ¡Sesión completada! Dominaste todas las palabras.</p>
-          <button onClick={manejarReiniciar} className="bg-blue-600 text-white font-bold py-3 px-6 rounded-lg text-xl hover:bg-blue-700">Reiniciar</button>
+          {actividadId ? (
+            <Link to="/curso" className="bg-blue-600 text-white font-bold py-3 px-6 rounded-lg text-xl hover:bg-blue-700">
+              Volver al mapa
+            </Link>
+          ) : (
+            <button onClick={manejarReiniciar} className="bg-blue-600 text-white font-bold py-3 px-6 rounded-lg text-xl hover:bg-blue-700">Reiniciar</button>
+          )}
         </div>
       </div>
     )

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 function Dashboard() {
   const usuario = JSON.parse(localStorage.getItem('usuario') || 'null')
   const nombre = usuario?.nombre || 'Estudiante'
+  const destinoCurso = usuario?.current_stage_id ? '/curso' : '/nivelacion'
 
   return (
     <div className="min-h-screen bg-fondo flex justify-center">
@@ -42,13 +43,10 @@ function Dashboard() {
               <span className="bg-azulNoche text-white rounded-lg p-2 text-xl">🤟</span>
               <div>
                 <p className="font-bold text-textoPrincipal">Lengua de Señas Argentina</p>
-                <p className="text-xs text-textoSecundario">Unidad 1 · 9 palabras</p>
+                <p className="text-xs text-textoSecundario">Seguí con tu progreso</p>
               </div>
             </div>
-            <div className="w-full bg-borde rounded-full h-2 mb-3">
-              <div className="bg-lavanda h-2 rounded-full" style={{ width: '35%' }}></div>
-            </div>
-            <Link to="/curso" className="block text-center bg-lavanda text-white font-bold py-2 rounded-lg hover:opacity-90">
+            <Link to={destinoCurso} className="block text-center bg-lavanda text-white font-bold py-2 rounded-lg hover:opacity-90">
               Continuar curso →
             </Link>
           </div>
