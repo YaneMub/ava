@@ -1,11 +1,10 @@
 import { useState, useEffect } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 
-const iconosPorTipo = {
-  presentacion: '▶️',
-  reconocimiento: '👁️',
-  produccion: '✏️',
-  repaso: '🔄',
+const metaPorTipo = {
+  aprender: { titulo: '¡Aprender!', subtitulo: 'Mirá las señas nuevas', icono: '👁️', ruta: 'aprender' },
+  reconocimiento: { titulo: 'Poné a prueba', subtitulo: 'Elegí la respuesta correcta', icono: '🎯', ruta: 'practicar' },
+  produccion: { titulo: 'A escribir', subtitulo: 'Escribí lo que ves', icono: '✏️', ruta: 'escribir' },
 }
 
 function MapaCurso() {
@@ -68,31 +67,12 @@ function MapaCurso() {
         <header className="flex items-center justify-between py-4">
           <Link to="/dashboard" className="text-2xl text-textoPrincipal">←</Link>
           <p className="font-bold text-textoPrincipal">{curso?.nombre}</p>
-          {/* Menú de opciones: todavía no conectado al backend
-          <span className="text-xl text-textoSecundario">⋯</span>
-          */}
         </header>
 
-        {/* Progreso/EXP/rachas: valores fijos de ejemplo, todavía no vienen del backend
-        <div className="flex justify-between text-center mb-4">
-          <div>
-            <p className="font-bold text-textoPrincipal">35%</p>
-            <p className="text-xs text-textoSecundario">progreso</p>
-          </div>
-          <div>
-            <p className="font-bold text-solDorado">120</p>
-            <p className="text-xs text-textoSecundario">EXP</p>
-          </div>
-          <div>
-            <p className="font-bold text-lavanda">7</p>
-            <p className="text-xs text-textoSecundario">rachas</p>
-          </div>
-        </div>
-        */}
-
         {unidadesProgreso.map((item) => {
-          const { unidad, estadoUnidad, actividades } = item
-          const bloqueada = estadoUnidad === 'bloqueada'
+          const { unidad, estadoUnidad, bloques, repaso } = item
+          const sinContenido = estadoUnidad === 'sin-contenido'
+          const bloqueada = estadoUnidad === 'bloqueada' || sinContenido
           const abierta = Boolean(abiertas[unidad.id])
 
           return (
@@ -100,6 +80,7 @@ function MapaCurso() {
 
               <button
                 type="button"
+                disabled={sinContenido}
                 onClick={() => alternarUnidad(unidad.id)}
                 className={`w-full text-left rounded-2xl p-4 flex items-center justify-between ${
                   bloqueada ? 'bg-borde/40 opacity-60' : 'bg-lavanda'
@@ -110,7 +91,7 @@ function MapaCurso() {
                     {unidad.nombre}
                   </p>
                   <p className={`text-sm ${bloqueada ? 'text-textoSecundario' : 'text-white opacity-90'}`}>
-                    {unidad.descripcion}
+                    {sinContenido ? 'Todavía no hay contenido cargado' : unidad.descripcion}
                   </p>
                 </div>
                 <span className={bloqueada ? 'text-xl' : 'text-xl text-white'}>
@@ -118,75 +99,103 @@ function MapaCurso() {
                 </span>
               </button>
 
-              {abierta && (
+              {abierta && !sinContenido && (
                 <div className="flex flex-col mt-3">
-                  {actividades.map((actividad, i) => {
-                    const puedeJugarse = actividad.estado === 'hecho' || actividad.estado === 'activo'
+                  {bloques.map((bloque) => (
+                    <div key={bloque.numero} className="mb-3">
+                      <p className="text-textoSecundario text-xs font-bold uppercase mb-2 ml-1">
+                        Bloque {bloque.numero}
+                      </p>
 
-                    const tarjeta = (
-                      <div className={`flex-1 rounded-2xl p-4 mb-3 ${
-                        actividad.estado === 'hecho' ? 'bg-lavanda/15 border border-lavanda/30' :
-                        actividad.estado === 'activo' ? 'bg-white border-2 border-lavanda' :
-                        'bg-borde/40 opacity-60'
-                      } ${puedeJugarse ? 'hover:opacity-80' : ''}`}>
-                        <div className="flex items-center justify-between gap-3">
-                          <div className="flex items-center gap-3">
-                            <span className={`rounded-full w-9 h-9 flex items-center justify-center text-lg ${
-                              actividad.estado === 'activo' ? 'bg-lavanda text-white' : 'bg-white'
-                            }`}>{iconosPorTipo[actividad.tipo] || '📘'}</span>
-                            <div>
-                              <p className="font-bold text-textoPrincipal">{actividad.titulo}</p>
-                              <p className="text-xs text-textoSecundario">{actividad.subtitulo}</p>
+                      {bloque.actividades.map((actividad, i) => {
+                        const meta = metaPorTipo[actividad.tipo]
+                        const puedeJugarse = actividad.estado === 'hecho' || actividad.estado === 'activo'
+
+                        const tarjeta = (
+                          <div className={`flex-1 rounded-2xl p-4 mb-3 ${
+                            actividad.estado === 'hecho' ? 'bg-lavanda/15 border border-lavanda/30' :
+                            actividad.estado === 'activo' ? 'bg-white border-2 border-lavanda' :
+                            'bg-borde/40 opacity-60'
+                          } ${puedeJugarse ? 'hover:opacity-80' : ''}`}>
+                            <div className="flex items-center justify-between gap-3">
+                              <div className="flex items-center gap-3">
+                                <span className={`rounded-full w-9 h-9 flex items-center justify-center text-lg ${
+                                  actividad.estado === 'activo' ? 'bg-lavanda text-white' : 'bg-white'
+                                }`}>{meta.icono}</span>
+                                <div>
+                                  <p className="font-bold text-textoPrincipal">{meta.titulo}</p>
+                                  <p className="text-xs text-textoSecundario">{meta.subtitulo}</p>
+                                </div>
+                              </div>
+                              {actividad.estado === 'hecho' && (
+                                <span className="bg-exito text-white text-xs font-bold rounded-full px-2 py-1">✓</span>
+                              )}
+                              {actividad.estado === 'bloqueado' && <span className="text-xl">🔒</span>}
                             </div>
                           </div>
-                          {actividad.estado === 'hecho' && (
-                            <span className="bg-exito text-white text-xs font-bold rounded-full px-2 py-1">✓</span>
-                          )}
-                          {actividad.estado === 'bloqueado' && <span className="text-xl">🔒</span>}
-                        </div>
+                        )
+
+                        return (
+                          <div key={actividad.tipo} className="flex gap-3">
+                            <div className="flex flex-col items-center w-4 flex-shrink-0">
+                              <span className={`w-4 h-4 rounded-full flex-shrink-0 ${
+                                actividad.estado === 'hecho' ? 'bg-exito' :
+                                actividad.estado === 'activo' ? 'bg-lavanda animate-pulse' :
+                                'bg-borde'
+                              }`}></span>
+                              {i < bloque.actividades.length - 1 && (
+                                <div className={`w-0.5 flex-1 my-1 ${actividad.estado === 'hecho' ? 'bg-exito' : 'bg-borde'}`}></div>
+                              )}
+                            </div>
+
+                            {puedeJugarse ? (
+                              <Link to={`/${meta.ruta}/${slug}/${unidad.id}/${bloque.numero}`} className="flex-1">
+                                {tarjeta}
+                              </Link>
+                            ) : (
+                              <div className="flex-1">{tarjeta}</div>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  ))}
+
+                  {/* Repaso general de la unidad, distinto al resto: abarca toda la unidad, no un bloque */}
+                  {repaso.estado === 'bloqueado' ? (
+                    <div className="rounded-2xl p-4 mb-3 bg-borde/40 opacity-60 flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <span className="rounded-full w-9 h-9 flex items-center justify-center text-lg bg-white">🔄</span>
+                        <p className="font-bold text-textoPrincipal">¿Repasamos?</p>
                       </div>
-                    )
-
-                    return (
-                      <div key={actividad.id} className="flex gap-3">
-                        <div className="flex flex-col items-center w-4 flex-shrink-0">
-                          <span className={`w-4 h-4 rounded-full flex-shrink-0 ${
-                            actividad.estado === 'hecho' ? 'bg-exito' :
-                            actividad.estado === 'activo' ? 'bg-lavanda animate-pulse' :
-                            'bg-borde'
-                          }`}></span>
-                          {i < actividades.length - 1 && (
-                            <div className={`w-0.5 flex-1 my-1 ${actividad.estado === 'hecho' ? 'bg-exito' : 'bg-borde'}`}></div>
-                          )}
+                      <span className="text-xl">🔒</span>
+                    </div>
+                  ) : (
+                    <Link
+                      to={`/repaso/${slug}/${unidad.id}`}
+                      className={`block rounded-2xl p-4 mb-3 hover:opacity-80 ${
+                        repaso.estado === 'hecho' ? 'bg-lavanda/15 border border-lavanda/30' : 'bg-white border-2 border-lavanda'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-3">
+                          <span className={`rounded-full w-9 h-9 flex items-center justify-center text-lg ${
+                            repaso.estado === 'activo' ? 'bg-lavanda text-white' : 'bg-white'
+                          }`}>🔄</span>
+                          <p className="font-bold text-textoPrincipal">¿Repasamos?</p>
                         </div>
-
-                        {puedeJugarse ? (
-                          <Link to={`/?actividad=${actividad.id}`} className="flex-1">
-                            {tarjeta}
-                          </Link>
-                        ) : (
-                          <div className="flex-1">{tarjeta}</div>
+                        {repaso.estado === 'hecho' && (
+                          <span className="bg-exito text-white text-xs font-bold rounded-full px-2 py-1">✓</span>
                         )}
                       </div>
-                    )
-                  })}
+                    </Link>
+                  )}
                 </div>
               )}
 
             </div>
           )
         })}
-
-        {/* Nav inferior: decorativo, todavía no navega a nada real
-        <nav className="fixed bottom-0 inset-x-0 bg-white border-t border-borde flex justify-center">
-          <div className="w-full max-w-md flex justify-around py-3">
-            <span className="text-lavanda font-bold text-xs flex flex-col items-center gap-1">🏠 Inicio</span>
-            <span className="text-textoSecundario text-xs flex flex-col items-center gap-1">📖 Cursos</span>
-            <span className="text-textoSecundario text-xs flex flex-col items-center gap-1">🏆 Logros</span>
-            <span className="text-textoSecundario text-xs flex flex-col items-center gap-1">👤 Perfil</span>
-          </div>
-        </nav>
-        */}
 
       </div>
     </div>

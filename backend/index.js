@@ -32,6 +32,13 @@ function calcularPerfilTipo(tipoUsuario) {
   return tipoUsuario === 'oyente' ? 'externo' : 'nativo';
 }
 
+// El bloque de cada palabra se calcula solo por su posición (orden) dentro
+// de la unidad — así no hace falta definir de antemano cuántos bloques tiene
+// cada unidad. Cargar más palabras en "contenido" arma bloques nuevos solo.
+const PALABRAS_POR_BLOQUE = 5;
+const PALABRAS_REPASO_EN_PRODUCCION = 2;
+const TIPOS_BLOQUE = ['aprender', 'reconocimiento', 'produccion'];
+
 function verificarToken(req, res, next) {
   const header = req.headers.authorization;
   const token = header && header.startsWith('Bearer ') ? header.slice(7) : null;
@@ -189,11 +196,14 @@ app.get('/api/cursos', verificarToken, async (req, res) => {
     const iniciadosIds = new Set(iniciados.rows.map((r) => r.curso_id));
 
     // Simplificado: por ahora hay un solo curso, así que todo lo que hay en
-    // "activities" cuenta como su contenido. Cuando haya más de un curso,
-    // esto necesita filtrar por curso_id (units todavía no está linkeada a cursos).
-    const totalActividades = await pool.query('SELECT COUNT(*) FROM activities');
-    const hechas = await pool.query('SELECT COUNT(*) FROM user_progress WHERE user_id = $1', [req.usuarioId]);
-    const total = Number(totalActividades.rows[0].count);
+    // "contenido" cuenta como su temario. Cuando haya más de un curso, esto
+    // necesita filtrar por curso_id (units todavía no está linkeada a cursos).
+    const totalPalabras = await pool.query('SELECT COUNT(*) FROM contenido');
+    const hechas = await pool.query(
+      `SELECT COUNT(*) FROM user_contenido WHERE user_id = $1 AND completado = true AND tipo = ANY($2::text[])`,
+      [req.usuarioId, TIPOS_BLOQUE]
+    );
+    const total = Number(totalPalabras.rows[0].count) * TIPOS_BLOQUE.length;
     const completadas = Number(hechas.rows[0].count);
     const progreso = total > 0 ? Math.round((completadas / total) * 100) : 0;
 
@@ -238,61 +248,95 @@ app.get('/api/units', async (req, res) => {
   }
 });
 
-// Devuelve TODAS las unidades (no solo la actual), cada una con su estado
-// ('completada' | 'actual' | 'bloqueada') y sus actividades ya resueltas
-// contra el progreso real del usuario, para que el mapa pueda mostrar
-// las unidades anteriores aunque ya estén superadas (estilo Duolingo).
+// Comentado: reemplazado por el guardado de progreso por palabra
+// (POST /api/contenido/:id/progreso), ya que las actividades ahora se
+// calculan a partir de "contenido" en vez de ser filas fijas por unidad.
+//
+// app.post('/api/progress', verificarToken, async (req, res) => {
+//   const { activityId } = req.body;
+//   ...
+// });
+
+// Devuelve TODAS las unidades, cada una con sus bloques calculados a partir
+// de "contenido" (de a PALABRAS_POR_BLOQUE palabras), el estado de cada
+// actividad (hecho/activo/bloqueado) según el progreso real del usuario en
+// "user_contenido", y el repaso general de la unidad.
 app.get('/api/units/progreso', verificarToken, async (req, res) => {
   try {
     const unidades = await pool.query('SELECT * FROM units ORDER BY orden');
-
-    let yaEncontroActual = false;
     const resultado = [];
+    let yaEncontroActual = false;
 
     for (const unidad of unidades.rows) {
-      const actividades = await pool.query(
-        'SELECT * FROM activities WHERE unit_id = $1 ORDER BY orden',
+      const contenido = await pool.query(
+        'SELECT * FROM contenido WHERE unit_id = $1 ORDER BY orden',
         [unidad.id]
       );
+      const idsContenido = contenido.rows.map((c) => c.id);
 
-      const idsActividades = actividades.rows.map((a) => a.id);
-      const progreso = idsActividades.length
+      const progresoRows = idsContenido.length
         ? await pool.query(
-            'SELECT activity_id FROM user_progress WHERE user_id = $1 AND activity_id = ANY($2::int[])',
-            [req.usuarioId, idsActividades]
+            `SELECT contenido_id, tipo FROM user_contenido
+             WHERE user_id = $1 AND contenido_id = ANY($2::int[]) AND completado = true`,
+            [req.usuarioId, idsContenido]
           )
         : { rows: [] };
-      const hechasIds = new Set(progreso.rows.map((p) => p.activity_id));
-      const todasHechas = actividades.rows.length > 0 && actividades.rows.every((a) => hechasIds.has(a.id));
+      const hechos = new Set(progresoRows.rows.map((p) => `${p.contenido_id}-${p.tipo}`));
 
-      if (todasHechas) {
-        resultado.push({
-          unidad,
-          estadoUnidad: 'completada',
-          actividades: actividades.rows.map((a) => ({ ...a, estado: 'hecho' })),
-        });
-        continue;
+      // Agrupar el contenido en bloques de PALABRAS_POR_BLOQUE, en el orden
+      // en que se cargaron las palabras.
+      const bloquesPalabras = [];
+      contenido.rows.forEach((palabra, indice) => {
+        const numeroBloque = Math.floor(indice / PALABRAS_POR_BLOQUE);
+        if (!bloquesPalabras[numeroBloque]) bloquesPalabras[numeroBloque] = [];
+        bloquesPalabras[numeroBloque].push(palabra);
+      });
+
+      const bloquesInfo = bloquesPalabras.map((palabras, i) => {
+        const ids = palabras.map((p) => p.id);
+        const actividades = TIPOS_BLOQUE.map((tipo) => ({
+          tipo,
+          hecha: ids.every((id) => hechos.has(`${id}-${tipo}`)),
+        }));
+        return { numero: i + 1, cantidadPalabras: palabras.length, actividades, completo: actividades.every((a) => a.hecha) };
+      });
+
+      const todosLosBloquesCompletos = bloquesInfo.length > 0 && bloquesInfo.every((b) => b.completo);
+      const repasoHecho = todosLosBloquesCompletos && idsContenido.every((id) => hechos.has(`${id}-repaso`));
+
+      let estadoUnidad;
+      if (contenido.rows.length === 0) {
+        estadoUnidad = 'sin-contenido'; // todavía no se cargaron palabras acá
+      } else if (repasoHecho) {
+        estadoUnidad = 'completada';
+      } else if (!yaEncontroActual) {
+        estadoUnidad = 'actual';
+        yaEncontroActual = true;
+      } else {
+        estadoUnidad = 'bloqueada';
       }
 
-      if (!yaEncontroActual) {
-        yaEncontroActual = true;
-        let yaHuboActiva = false;
-        const actividadesConEstado = actividades.rows.map((a) => {
-          if (hechasIds.has(a.id)) return { ...a, estado: 'hecho' };
+      let yaHuboActiva = false;
+      const bloques = bloquesInfo.map((bloque) => {
+        const actividadesConEstado = bloque.actividades.map((a) => {
+          if (estadoUnidad === 'completada') return { tipo: a.tipo, estado: 'hecho' };
+          if (estadoUnidad !== 'actual') return { tipo: a.tipo, estado: 'bloqueado' };
+          if (a.hecha) return { tipo: a.tipo, estado: 'hecho' };
           if (!yaHuboActiva) {
             yaHuboActiva = true;
-            return { ...a, estado: 'activo' };
+            return { tipo: a.tipo, estado: 'activo' };
           }
-          return { ...a, estado: 'bloqueado' };
+          return { tipo: a.tipo, estado: 'bloqueado' };
         });
-        resultado.push({ unidad, estadoUnidad: 'actual', actividades: actividadesConEstado });
-      } else {
-        resultado.push({
-          unidad,
-          estadoUnidad: 'bloqueada',
-          actividades: actividades.rows.map((a) => ({ ...a, estado: 'bloqueado' })),
-        });
-      }
+        return { numero: bloque.numero, cantidadPalabras: bloque.cantidadPalabras, actividades: actividadesConEstado };
+      });
+
+      let estadoRepaso;
+      if (estadoUnidad === 'completada') estadoRepaso = 'hecho';
+      else if (estadoUnidad === 'actual' && todosLosBloquesCompletos) estadoRepaso = 'activo';
+      else estadoRepaso = 'bloqueado';
+
+      resultado.push({ unidad, estadoUnidad, bloques, repaso: { estado: estadoRepaso } });
     }
 
     res.json(resultado);
@@ -302,19 +346,84 @@ app.get('/api/units/progreso', verificarToken, async (req, res) => {
   }
 });
 
-app.post('/api/progress', verificarToken, async (req, res) => {
-  const { activityId } = req.body;
+// Devuelve las palabras a practicar para una actividad puntual.
+// - aprender / reconocimiento: las palabras nuevas de ese bloque.
+// - produccion: las palabras del bloque + un repaso de bloques anteriores
+//   (las que menos se practicaron, no una lista fija).
+// - repaso: todas las palabras de la unidad, priorizando las peor practicadas.
+app.get('/api/contenido', verificarToken, async (req, res) => {
+  const unitId = Number(req.query.unitId);
+  const bloque = req.query.bloque ? Number(req.query.bloque) : null;
+  const tipo = req.query.tipo;
 
-  if (!activityId) {
-    return res.status(400).json({ error: 'Falta activityId' });
+  if (!unitId || !tipo) {
+    return res.status(400).json({ error: 'Faltan parámetros (unitId, tipo)' });
+  }
+
+  try {
+    const contenido = await pool.query('SELECT * FROM contenido WHERE unit_id = $1 ORDER BY orden', [unitId]);
+
+    const vecesPracticadaPorId = async (ids) => {
+      if (!ids.length) return new Map();
+      const practica = await pool.query(
+        `SELECT contenido_id, veces_practicada FROM user_contenido
+         WHERE user_id = $1 AND contenido_id = ANY($2::int[]) AND tipo = 'produccion'`,
+        [req.usuarioId, ids]
+      );
+      return new Map(practica.rows.map((p) => [p.contenido_id, p.veces_practicada]));
+    };
+
+    if (tipo === 'repaso') {
+      const ids = contenido.rows.map((c) => c.id);
+      const veces = await vecesPracticadaPorId(ids);
+      const ordenado = [...contenido.rows].sort((a, b) => (veces.get(a.id) || 0) - (veces.get(b.id) || 0));
+      return res.json(ordenado);
+    }
+
+    if (!bloque) {
+      return res.status(400).json({ error: 'Falta el bloque' });
+    }
+
+    const inicio = (bloque - 1) * PALABRAS_POR_BLOQUE;
+    const palabrasBloque = contenido.rows.slice(inicio, inicio + PALABRAS_POR_BLOQUE);
+
+    if (tipo !== 'produccion') {
+      return res.json(palabrasBloque);
+    }
+
+    const palabrasAnteriores = contenido.rows.slice(0, inicio);
+    let palabrasRepaso = [];
+    if (palabrasAnteriores.length > 0) {
+      const veces = await vecesPracticadaPorId(palabrasAnteriores.map((p) => p.id));
+      palabrasRepaso = [...palabrasAnteriores]
+        .sort((a, b) => (veces.get(a.id) || 0) - (veces.get(b.id) || 0))
+        .slice(0, PALABRAS_REPASO_EN_PRODUCCION);
+    }
+
+    res.json([...palabrasBloque, ...palabrasRepaso]);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Error al obtener el contenido' });
+  }
+});
+
+app.post('/api/contenido/:id/progreso', verificarToken, async (req, res) => {
+  const { tipo, correcto } = req.body;
+
+  if (!['aprender', 'reconocimiento', 'produccion', 'repaso'].includes(tipo)) {
+    return res.status(400).json({ error: 'Tipo inválido' });
   }
 
   try {
     await pool.query(
-      `INSERT INTO user_progress (user_id, activity_id, estado)
-       VALUES ($1, $2, 'hecho')
-       ON CONFLICT (user_id, activity_id) DO NOTHING`,
-      [req.usuarioId, activityId]
+      `INSERT INTO user_contenido (user_id, contenido_id, tipo, completado, veces_practicada, ultima_practica)
+       VALUES ($1, $2, $3, $4, 1, NOW())
+       ON CONFLICT (user_id, contenido_id, tipo)
+       DO UPDATE SET
+         completado = user_contenido.completado OR EXCLUDED.completado,
+         veces_practicada = user_contenido.veces_practicada + 1,
+         ultima_practica = NOW()`,
+      [req.usuarioId, req.params.id, tipo, correcto !== false]
     );
     res.status(201).json({ ok: true });
   } catch (error) {

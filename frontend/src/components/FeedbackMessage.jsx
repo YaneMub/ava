@@ -1,16 +1,30 @@
 
-function FeedbackMessage ({esCorrecto}) {
+function FeedbackMessage ({esCorrecto, palabraCorrecta}) {
     if (esCorrecto === null) {
         return null
     }
 
-     if (esCorrecto === true) {
+    if (esCorrecto === true) {
         return (
-            <span className="text-green-600 font-bold text-xl">¡Bien hecho!</span>
+            <div className="w-full bg-fondoExito text-exito font-bold rounded-lg p-3 flex items-center gap-2">
+                <span>✅</span>
+                <span>¡Correcto! Muy bien</span>
+            </div>
         )
-    } 
+    }
+
     return (
-            <span className="text-red-500 font-bold text-xl">¡Incorrecto!</span>
+        <div className="w-full flex flex-col gap-2">
+            <div className="bg-fondoError text-error font-bold rounded-lg p-3 flex items-center gap-2">
+                <span>❌</span>
+                <span>Intentalo de nuevo</span>
+            </div>
+            {palabraCorrecta && (
+                <div className="bg-advertencia text-textoPrincipal font-bold rounded-lg p-3">
+                    La respuesta correcta era: {palabraCorrecta}
+                </div>
+            )}
+        </div>
     )
 }
 
