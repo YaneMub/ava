@@ -4,7 +4,7 @@ import Practica from "./pages/Practica.jsx";
 import Login from "./pages/Login.jsx";
 import Dashboard from "./pages/Dashboard.jsx";
 import MapaCurso from "./pages/MapaCurso.jsx";
-import TestNivelacion from "./pages/TestNivelacion.jsx";
+// import TestNivelacion from "./pages/TestNivelacion.jsx"; // comentado: ver nota en backend/index.js
 
 function App () {
   return(
@@ -12,8 +12,8 @@ function App () {
       <Route path="/" element={<Practica />}></Route>
       <Route path="/login" element={<Login />}></Route>
       <Route path="/dashboard" element={<Dashboard />}></Route>
-      <Route path="/curso" element={<MapaCurso />}></Route>
-      <Route path="/nivelacion" element={<TestNivelacion />}></Route>
+      <Route path="/curso/:slug" element={<MapaCurso />}></Route>
+      {/* <Route path="/nivelacion" element={<TestNivelacion />}></Route> */}
     </Routes>
   )
 }

@@ -132,30 +132,99 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
-app.post('/api/usuarios/nivelacion', verificarToken, async (req, res) => {
-  const { nivel } = req.body;
+// Comentado de momento: la nivelación asigna un current_stage_id global al
+// usuario (vía la tabla "stages"), pero eso no escala si cada curso futuro
+// tiene su propio temario/niveles. Cuando se rediseñe para ser por-curso,
+// se puede reactivar.
+//
+// app.post('/api/usuarios/nivelacion', verificarToken, async (req, res) => {
+//   const { nivel } = req.body;
+//
+//   if (!['nada', 'poco', 'mucho'].includes(nivel)) {
+//     return res.status(400).json({ error: 'Nivel inválido' });
+//   }
+//
+//   const orden = nivel === 'mucho' ? 2 : 1;
+//
+//   try {
+//     const stage = await pool.query('SELECT id FROM stages WHERE orden = $1', [orden]);
+//     const stageId = stage.rows[0].id;
+//
+//     const resultado = await pool.query(
+//       `UPDATE users SET current_stage_id = $1
+//        WHERE id = $2
+//        RETURNING id, nombre, email, tipo_usuario, perfil_tipo, current_stage_id`,
+//       [stageId, req.usuarioId]
+//     );
+//
+//     res.json({ usuario: resultado.rows[0] });
+//   } catch (error) {
+//     console.error(error);
+//     res.status(500).json({ error: 'Error al guardar la nivelación' });
+//   }
+// });
 
-  if (!['nada', 'poco', 'mucho'].includes(nivel)) {
-    return res.status(400).json({ error: 'Nivel inválido' });
-  }
-
-  const orden = nivel === 'mucho' ? 2 : 1;
-
+app.post('/api/cursos/:id/iniciar', verificarToken, async (req, res) => {
   try {
-    const stage = await pool.query('SELECT id FROM stages WHERE orden = $1', [orden]);
-    const stageId = stage.rows[0].id;
-
-    const resultado = await pool.query(
-      `UPDATE users SET current_stage_id = $1
-       WHERE id = $2
-       RETURNING id, nombre, email, tipo_usuario, perfil_tipo, current_stage_id`,
-      [stageId, req.usuarioId]
+    await pool.query(
+      `INSERT INTO cursos_usuario (usuario_id, curso_id)
+       VALUES ($1, $2)
+       ON CONFLICT (usuario_id, curso_id) DO NOTHING`,
+      [req.usuarioId, req.params.id]
     );
-
-    res.json({ usuario: resultado.rows[0] });
+    res.status(201).json({ ok: true });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Error al guardar la nivelación' });
+    res.status(500).json({ error: 'Error al iniciar el curso' });
+  }
+});
+
+app.get('/api/cursos', verificarToken, async (req, res) => {
+  try {
+    const cursos = await pool.query('SELECT * FROM cursos ORDER BY orden');
+    const iniciados = await pool.query(
+      'SELECT curso_id FROM cursos_usuario WHERE usuario_id = $1',
+      [req.usuarioId]
+    );
+    const iniciadosIds = new Set(iniciados.rows.map((r) => r.curso_id));
+
+    // Simplificado: por ahora hay un solo curso, así que todo lo que hay en
+    // "activities" cuenta como su contenido. Cuando haya más de un curso,
+    // esto necesita filtrar por curso_id (units todavía no está linkeada a cursos).
+    const totalActividades = await pool.query('SELECT COUNT(*) FROM activities');
+    const hechas = await pool.query('SELECT COUNT(*) FROM user_progress WHERE user_id = $1', [req.usuarioId]);
+    const total = Number(totalActividades.rows[0].count);
+    const completadas = Number(hechas.rows[0].count);
+    const progreso = total > 0 ? Math.round((completadas / total) * 100) : 0;
+
+    const misCursos = [];
+    const disponibles = [];
+
+    cursos.rows.forEach((curso) => {
+      if (iniciadosIds.has(curso.id)) {
+        misCursos.push({ ...curso, progreso });
+      } else {
+        disponibles.push(curso);
+      }
+    });
+
+    res.json({ misCursos, disponibles });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Error al obtener los cursos' });
+  }
+});
+
+app.get('/api/cursos/:slug', verificarToken, async (req, res) => {
+  try {
+    const resultado = await pool.query('SELECT * FROM cursos WHERE slug = $1', [req.params.slug]);
+    if (!resultado.rows[0]) {
+      return res.status(404).json({ error: 'Curso no encontrado' });
+    }
+    res.json(resultado.rows[0]);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Error al obtener el curso' });
   }
 });
 
@@ -169,11 +238,16 @@ app.get('/api/units', async (req, res) => {
   }
 });
 
-// Calcula sola cuál es la unidad "activa" del usuario: la primera unidad
-// (en orden) que todavía no tiene todas sus actividades marcadas como hechas.
-app.get('/api/units/actual', verificarToken, async (req, res) => {
+// Devuelve TODAS las unidades (no solo la actual), cada una con su estado
+// ('completada' | 'actual' | 'bloqueada') y sus actividades ya resueltas
+// contra el progreso real del usuario, para que el mapa pueda mostrar
+// las unidades anteriores aunque ya estén superadas (estilo Duolingo).
+app.get('/api/units/progreso', verificarToken, async (req, res) => {
   try {
     const unidades = await pool.query('SELECT * FROM units ORDER BY orden');
+
+    let yaEncontroActual = false;
+    const resultado = [];
 
     for (const unidad of unidades.rows) {
       const actividades = await pool.query(
@@ -182,15 +256,26 @@ app.get('/api/units/actual', verificarToken, async (req, res) => {
       );
 
       const idsActividades = actividades.rows.map((a) => a.id);
-      const progreso = await pool.query(
-        'SELECT activity_id FROM user_progress WHERE user_id = $1 AND activity_id = ANY($2::int[])',
-        [req.usuarioId, idsActividades]
-      );
+      const progreso = idsActividades.length
+        ? await pool.query(
+            'SELECT activity_id FROM user_progress WHERE user_id = $1 AND activity_id = ANY($2::int[])',
+            [req.usuarioId, idsActividades]
+          )
+        : { rows: [] };
       const hechasIds = new Set(progreso.rows.map((p) => p.activity_id));
+      const todasHechas = actividades.rows.length > 0 && actividades.rows.every((a) => hechasIds.has(a.id));
 
-      const todasHechas = actividades.rows.every((a) => hechasIds.has(a.id));
+      if (todasHechas) {
+        resultado.push({
+          unidad,
+          estadoUnidad: 'completada',
+          actividades: actividades.rows.map((a) => ({ ...a, estado: 'hecho' })),
+        });
+        continue;
+      }
 
-      if (!todasHechas) {
+      if (!yaEncontroActual) {
+        yaEncontroActual = true;
         let yaHuboActiva = false;
         const actividadesConEstado = actividades.rows.map((a) => {
           if (hechasIds.has(a.id)) return { ...a, estado: 'hecho' };
@@ -200,22 +285,17 @@ app.get('/api/units/actual', verificarToken, async (req, res) => {
           }
           return { ...a, estado: 'bloqueado' };
         });
-
-        return res.json({ unidad, actividades: actividadesConEstado, completado: false });
+        resultado.push({ unidad, estadoUnidad: 'actual', actividades: actividadesConEstado });
+      } else {
+        resultado.push({
+          unidad,
+          estadoUnidad: 'bloqueada',
+          actividades: actividades.rows.map((a) => ({ ...a, estado: 'bloqueado' })),
+        });
       }
     }
 
-    // El usuario completó todas las unidades disponibles.
-    const ultimaUnidad = unidades.rows[unidades.rows.length - 1];
-    const actividades = await pool.query(
-      'SELECT * FROM activities WHERE unit_id = $1 ORDER BY orden',
-      [ultimaUnidad.id]
-    );
-    res.json({
-      unidad: ultimaUnidad,
-      actividades: actividades.rows.map((a) => ({ ...a, estado: 'hecho' })),
-      completado: true,
-    });
+    res.json(resultado);
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Error al calcular el progreso' });
