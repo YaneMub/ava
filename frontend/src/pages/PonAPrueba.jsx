@@ -132,7 +132,12 @@ function PonAPrueba() {
                 {pregunta.direccion === 'video-a-palabra' ? (
                   opcion.palabra
                 ) : (
-                  <img src={opcion.video_url} alt="" className="w-full h-20 object-cover rounded pointer-events-none" />
+                  <iframe
+                    src={opcion.video_url}
+                    title={opcion.palabra}
+                    className="w-full h-20 rounded pointer-events-none"
+                    allow="autoplay"
+                  ></iframe>
                 )}
               </button>
             )
